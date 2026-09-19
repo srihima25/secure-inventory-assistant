@@ -30,6 +30,7 @@ function VoiceAssistant({ onInventoryUpdated }) {
   const recognitionErrorRef = useRef(false)
   const finalTranscriptRef = useRef('')
   const interimTranscriptRef = useRef('')
+  const resetTimerRef = useRef(null)
 
   const selectedLanguage = LANGUAGES.find((item) => item.code === language)?.label || 'English'
   const displayedTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ')
@@ -43,6 +44,9 @@ function VoiceAssistant({ onInventoryUpdated }) {
       const result = await axios.post(`${API}/voice/stock`, { text }, { headers: AUTH })
       setParsedCommand(result.data)
       if (result.data.success && ['ADD', 'REMOVE'].includes(result.data.parsed?.action)) await onInventoryUpdated?.()
+      if (result.data.success) {
+        resetTimerRef.current = window.setTimeout(() => resetVoiceCommand(), 2500)
+      }
     } catch (error) {
       setErrorMessage(error.response?.data?.detail || 'Unable to connect to the inventory server. Please try again.')
     } finally {
@@ -63,6 +67,10 @@ function VoiceAssistant({ onInventoryUpdated }) {
   }
 
   const resetVoiceCommand = () => {
+    if (resetTimerRef.current) {
+      window.clearTimeout(resetTimerRef.current)
+      resetTimerRef.current = null
+    }
     stopRequestedRef.current = true
     recognitionErrorRef.current = false
     recognitionRef.current?.abort()
@@ -158,7 +166,10 @@ function VoiceAssistant({ onInventoryUpdated }) {
     }
   }
 
-  useEffect(() => () => recognitionRef.current?.abort(), [])
+  useEffect(() => () => {
+    recognitionRef.current?.abort()
+    if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
+  }, [])
 
   return <section className="assistant-panel" id="overview">
     <div className="assistant-copy">
@@ -170,7 +181,7 @@ function VoiceAssistant({ onInventoryUpdated }) {
         <span>Status: <strong>{isListening ? 'Listening...' : 'Ready'}</strong></span>
       </div>
       {isEditing ? <textarea className="transcript-editor" value={editedTranscript} onChange={(event) => setEditedTranscript(event.target.value)} aria-label="Edit recognized command" /> : <div className="transcript" aria-live="polite">{displayedTranscript || 'Your recognized speech will appear here.'}</div>}
-      <button className="parse-command-button" type="button" onClick={() => sendStockCommand(finalTranscript)} disabled={!finalTranscript || isListening || isProcessing}>{isProcessing ? 'Processing...' : 'Process Command'}</button>
+      <button className="parse-command-button" type="button" onClick={() => sendStockCommand(finalTranscript)} disabled={!finalTranscript || isListening || isProcessing}>{isProcessing ? 'Processing...' : 'Process Command'}</button><button className="parse-command-button" type="button" onClick={resetVoiceCommand}>Reset</button>
       {isEditing && <button className="parse-command-button" type="button" onClick={applyEdit} disabled={!editedTranscript.trim()}>Apply Edit</button>}
       {parsedCommand && <div className={`parsed-command ${parsedCommand.success ? '' : 'needs-clarification'}`} aria-live="polite">
         {!parsedCommand.success ? <strong>{parsedCommand.message}</strong> : <><span>Product: <strong>{parsedCommand.parsed.product}</strong></span><span>Action: <strong>{parsedCommand.parsed.action}</strong></span><span>Quantity: <strong>{parsedCommand.parsed.quantity ?? 'Not specified'}</strong></span><span>Unit: <strong>{parsedCommand.parsed.unit ?? 'Not specified'}</strong></span><div className="command-success"><strong>{parsedCommand.message}</strong></div></>}
@@ -182,7 +193,6 @@ function VoiceAssistant({ onInventoryUpdated }) {
         <select value={language} onChange={(event) => setLanguage(event.target.value)} disabled={isListening} aria-label="Speech language">
           {LANGUAGES.map((item) => <option value={item.code} key={item.code}>{item.label}</option>)}
         </select>
-        <button className="parse-command-button" type="button" onClick={resetVoiceCommand}>Reset</button>
       </div>
     </div>
     <div className="assistant-orbit"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="voice-wave"><i /><i /><i /><i /><i /></div><span>{isListening ? 'Listening now' : 'Speak naturally'}</span></div>
