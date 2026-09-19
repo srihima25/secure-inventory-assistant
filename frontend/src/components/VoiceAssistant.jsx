@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 
-const PARSE_API = 'https://secure-inventory-assistant.onrender.com/api'
+const API = 'https://secure-inventory-assistant.onrender.com/api'
+const AUTH = { Authorization: 'Bearer owner-demo-token' }
 
 const LANGUAGES = [
   { code: 'en-IN', label: 'English' },
@@ -13,46 +14,42 @@ function getRecognitionConstructor() {
   return window.SpeechRecognition || window.webkitSpeechRecognition
 }
 
-function VoiceAssistant() {
+function VoiceAssistant({ onInventoryUpdated }) {
   const [language, setLanguage] = useState('en-IN')
   const [isListening, setIsListening] = useState(false)
   const [finalTranscript, setFinalTranscript] = useState('')
   const [interimTranscript, setInterimTranscript] = useState('')
   const [errorMessage, setErrorMessage] = useState('')
   const [parsedCommand, setParsedCommand] = useState(null)
-  const [isParsing, setIsParsing] = useState(false)
-  const [confirmed, setConfirmed] = useState(false)
+  const [isProcessing, setIsProcessing] = useState(false)
   const [isEditing, setIsEditing] = useState(false)
   const [editedTranscript, setEditedTranscript] = useState('')
   const recognitionRef = useRef(null)
   const stopRequestedRef = useRef(false)
+  const recognitionErrorRef = useRef(false)
+  const finalTranscriptRef = useRef('')
 
   const selectedLanguage = LANGUAGES.find((item) => item.code === language)?.label || 'English'
   const displayedTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ')
 
-  const understandCommand = async () => {
-    if (!finalTranscript || isListening) return
-    setIsParsing(true)
+  const sendStockCommand = async (text) => {
+    if (!text || isProcessing) return
+    setIsProcessing(true)
     setErrorMessage('')
     setParsedCommand(null)
-    setConfirmed(false)
     try {
-      const result = await axios.post(`${PARSE_API}/voice/parse`, { text: finalTranscript })
+      const result = await axios.post(`${API}/voice/stock`, { text }, { headers: AUTH })
       setParsedCommand(result.data)
+      if (result.data.success && ['ADD', 'REMOVE'].includes(result.data.parsed?.action)) await onInventoryUpdated?.()
     } catch (error) {
-      setErrorMessage(error.response?.data?.detail || 'The command could not be understood. Please try again.')
+      setErrorMessage(error.response?.data?.detail || 'Unable to connect to the inventory server. Please try again.')
     } finally {
-      setIsParsing(false)
+      setIsProcessing(false)
     }
   }
 
-  const editCommand = () => {
-    setEditedTranscript(finalTranscript)
-    setIsEditing(true)
-    setConfirmed(false)
-  }
-
   const applyEdit = () => {
+    finalTranscriptRef.current = editedTranscript.trim()
     setFinalTranscript(editedTranscript.trim())
     setIsEditing(false)
     setParsedCommand(null)
@@ -77,6 +74,7 @@ function VoiceAssistant() {
 
     const recognition = new Recognition()
     stopRequestedRef.current = false
+    recognitionErrorRef.current = false
     recognition.lang = language
     recognition.continuous = true
     recognition.interimResults = true
@@ -92,7 +90,10 @@ function VoiceAssistant() {
         if (event.results[index].isFinal) nextFinal += `${text} `
         else nextInterim += `${text} `
       }
-      if (nextFinal) setFinalTranscript((current) => `${current} ${nextFinal}`.trim())
+      if (nextFinal) {
+        finalTranscriptRef.current = `${finalTranscriptRef.current} ${nextFinal}`.trim()
+        setFinalTranscript(finalTranscriptRef.current)
+      }
       setInterimTranscript(nextInterim.trim())
     }
     recognition.onerror = (event) => {
@@ -103,13 +104,16 @@ function VoiceAssistant() {
       }
       setErrorMessage(messages[event.error] || 'Microphone access failed. Please try again.')
       stopRequestedRef.current = true
+      recognitionErrorRef.current = true
       setIsListening(false)
     }
     recognition.onend = () => {
+      const text = finalTranscriptRef.current
       if (!stopRequestedRef.current) setErrorMessage('Speech recognition ended unexpectedly. Click Start Listening to try again.')
       setIsListening(false)
       setInterimTranscript('')
       recognitionRef.current = null
+      if (text && !recognitionErrorRef.current) sendStockCommand(text)
     }
     recognitionRef.current = recognition
     try {
@@ -133,18 +137,12 @@ function VoiceAssistant() {
         <span>Status: <strong>{isListening ? 'Listening...' : 'Ready'}</strong></span>
       </div>
       {isEditing ? <textarea className="transcript-editor" value={editedTranscript} onChange={(event) => setEditedTranscript(event.target.value)} aria-label="Edit recognized command" /> : <div className="transcript" aria-live="polite">{displayedTranscript || 'Your recognized speech will appear here.'}</div>}
-      <button className="parse-command-button" type="button" onClick={understandCommand} disabled={!finalTranscript || isListening || isParsing}>{isParsing ? 'Understanding...' : 'Understand Command'}</button>
+      <button className="parse-command-button" type="button" onClick={() => sendStockCommand(finalTranscript)} disabled={!finalTranscript || isListening || isProcessing}>{isProcessing ? 'Processing...' : 'Process Command'}</button>
       {isEditing && <button className="parse-command-button" type="button" onClick={applyEdit} disabled={!editedTranscript.trim()}>Apply Edit</button>}
-      {parsedCommand && !confirmed && <div className={`parsed-command ${parsedCommand.needs_clarification ? 'needs-clarification' : ''}`} aria-live="polite">
-        {parsedCommand.needs_clarification ? <strong>{parsedCommand.message}</strong> : <>
-          <span>Product: <strong>{parsedCommand.product}</strong></span>
-          <span>Action: <strong>{parsedCommand.action}</strong></span>
-          <span>Quantity: <strong>{parsedCommand.quantity ?? 'Not specified'}</strong></span>
-          <span>Unit: <strong>{parsedCommand.unit ?? 'Not specified'}</strong></span>
-          <div className="command-actions"><button type="button" onClick={() => setConfirmed(true)}>Confirm</button><button type="button" onClick={editCommand}>Edit</button><button type="button" onClick={() => setParsedCommand(null)}>Cancel</button></div>
-        </>}
+      {parsedCommand && <div className={`parsed-command ${parsedCommand.success ? '' : 'needs-clarification'}`} aria-live="polite">
+        {!parsedCommand.success ? <strong>{parsedCommand.message}</strong> : <><span>Product: <strong>{parsedCommand.parsed.product}</strong></span><span>Action: <strong>{parsedCommand.parsed.action}</strong></span><span>Quantity: <strong>{parsedCommand.parsed.quantity ?? 'Not specified'}</strong></span><span>Unit: <strong>{parsedCommand.parsed.unit ?? 'Not specified'}</strong></span><div className="command-success"><strong>{parsedCommand.message}</strong></div></>}
       </div>}
-      {confirmed && <div className="command-success" aria-live="polite"><strong>Command confirmed in prototype mode.</strong><span>No inventory was changed.</span></div>}
+      {isProcessing && <div className="command-success" aria-live="polite"><strong>Processing your inventory command...</strong></div>}
       <div className="assistant-actions">
         <button className={`mic-button ${isListening ? 'listening' : ''}`} onClick={startListening} aria-label={isListening ? 'Stop listening' : 'Start listening'} title={isListening ? 'Stop Listening' : 'Start Listening'}><span aria-hidden="true">{isListening ? '■' : '●'}</span></button>
         <div><strong>{isListening ? 'Stop Listening' : 'Start Listening'}</strong><small>English, Telugu, Hindi</small></div>

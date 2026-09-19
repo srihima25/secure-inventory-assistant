@@ -47,6 +47,10 @@ class VoiceParseRequest(BaseModel):
     text: str = Field(min_length=1)
 
 
+class VoiceStockRequest(BaseModel):
+    text: str = Field(min_length=1)
+
+
 def products():
     with get_connection() as connection:
         return [dict(row) for row in connection.execute("SELECT id, name, unit, quantity, reorder_threshold FROM products ORDER BY name").fetchall()]
@@ -132,6 +136,40 @@ def low_stock(_user=Depends(current_user)):
 @app.post("/api/voice/parse")
 def parse_voice_command(request: VoiceParseRequest):
     return parse_command(request.text)
+
+
+@app.post("/api/voice/stock")
+def voice_stock(request: VoiceStockRequest, user=Depends(current_user)):
+    parsed = parse_command(request.text)
+    if parsed.get("needs_clarification"):
+        return {"success": False, "parsed": parsed, "message": parsed.get("message", "Please clarify the command.")}
+
+    action = parsed.get("action")
+    product_name = parsed.get("product")
+    if action not in {"ADD", "REMOVE", "CHECK"} or not product_name:
+        return {"success": False, "parsed": parsed, "message": "Please specify a product and action."}
+
+    try:
+        with get_connection() as connection:
+            product = connection.execute("SELECT * FROM products WHERE name = ? COLLATE NOCASE", (product_name,)).fetchone()
+        if not product:
+            return {"success": False, "parsed": parsed, "message": f"Product {product_name} was not found. Please add the product first."}
+
+        if action == "CHECK":
+            return {"success": True, "parsed": parsed, "message": f"{product['name']} has {product['quantity']:g} {product['unit']} in stock."}
+
+        if not parsed.get("unit"):
+            return {"success": False, "parsed": parsed, "message": "Please specify the quantity and unit."}
+        if parsed["unit"].casefold() != product["unit"].casefold():
+            return {"success": False, "parsed": parsed, "message": f"{product['name']} is measured in {product['unit']}, not {parsed['unit']}."}
+
+        result = change_stock(InventoryRequest(product_id=product["id"], quantity=parsed["quantity"], user_id=user["id"]), action, user)
+        price_note = " Price was understood but is not stored in the current transaction database." if parsed.get("price") is not None else ""
+        return {"success": True, "parsed": parsed, "message": f"{result['message']}. Current stock: {result['product']['quantity']:g} {result['product']['unit']}.{price_note}"}
+    except HTTPException as error:
+        return {"success": False, "parsed": parsed, "message": str(error.detail)}
+    except Exception as error:
+        raise HTTPException(status_code=500, detail="The voice stock command could not be completed.") from error
 
 
 @app.get("/api/analytics/sales")
