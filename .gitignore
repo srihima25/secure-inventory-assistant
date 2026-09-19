@@ -1,0 +1,7 @@
+backend/.env
+backend/inventory.db
+frontend/node_modules/
+frontend/dist/
+.venv/
+__pycache__/
+*.pyc
