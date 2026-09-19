@@ -98,10 +98,10 @@ function App() {
     <aside className="sidebar">
       <div className="brand"><div className="brand-mark">SI</div><div><strong>Stockwise</strong><span>voice inventory</span></div></div>
       <nav>{NAV_ITEMS.map(([id, label, icon]) => <button className={screen === id ? 'active' : ''} onClick={() => go(id)} key={id}><span>{icon}</span>{label}{id === 'alerts' && lowStock.length > 0 && <em>{lowStock.length}</em>}</button>)}</nav>
-      <div className="sidebar-note"><span className="live-dot" /> Prototype / Demo<div>Voice verification is a demo reference flow. Permissions remain enforced by the backend.</div></div>
+      <div className="sidebar-note"><span className="live-dot" /><div>Voice verification is a demo reference flow. Permissions remain enforced by the backend.</div></div>
     </aside>
     <main className="main-content">
-      <header className="topbar"><div><p className="eyebrow">MONDAY, 19 SEPTEMBER 2026</p><h1>{screenTitle(screen)}</h1></div><div className="profile"><div className="avatar">AR</div><div><strong>Asha Rao</strong><span>Owner access</span></div><span className="demo-chip">Prototype / Demo</span></div></header>
+      <header className="topbar"><div><p className="eyebrow">MONDAY, 19 SEPTEMBER 2026</p><h1>{screenTitle(screen)}</h1></div><div className="profile"><div className="avatar">AR</div><div><strong>Asha Rao</strong><span>Owner access</span></div></div></header>
       {error && <div className="data-banner error-banner">{error}</div>}
       {screen === 'dashboard' && <Dashboard products={products} totalStock={totalStock} lowStock={lowStock} history={history} loading={loading} onNavigate={go} />}
       {screen === 'voice' && <VoiceScreen onInventoryUpdated={loadDashboard} />}
