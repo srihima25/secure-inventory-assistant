@@ -25,7 +25,7 @@ class LoginRequest(BaseModel):
 class ProductRequest(BaseModel):
     name: str
     unit: str
-    quantity: float = Field(gt=0)
+    quantity: float = Field(ge=0)
     reorder_threshold: float = Field(ge=0)
 
 
