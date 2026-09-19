@@ -46,6 +46,8 @@ def init_db():
         if connection.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
             connection.execute("INSERT INTO users (name, role) VALUES (?, ?)", ("Asha Rao", "OWNER"))
             connection.execute("INSERT INTO users (name, role) VALUES (?, ?)", ("Ravi Kumar", "STAFF"))
-        if connection.execute("SELECT COUNT(*) FROM products").fetchone()[0] == 0:
-            products = [("Rice", "Bags", 20, 10), ("Sugar", "Kg", 15, 10), ("Oil", "Litres", 10, 10), ("Biscuits", "Cartons", 5, 10)]
-            connection.executemany("INSERT INTO products (name, unit, quantity, reorder_threshold) VALUES (?, ?, ?, ?)", products)
+        products = [("Rice", "Bags", 20, 10), ("Sugar", "Kg", 15, 10), ("Oil", "Litres", 10, 10), ("Biscuits", "Cartons", 5, 10)]
+        connection.executemany(
+            "INSERT OR IGNORE INTO products (name, unit, quantity, reorder_threshold) VALUES (?, ?, ?, ?)",
+            products,
+        )

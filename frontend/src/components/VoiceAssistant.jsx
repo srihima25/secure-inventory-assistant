@@ -30,7 +30,6 @@ function VoiceAssistant({ onInventoryUpdated }) {
   const recognitionErrorRef = useRef(false)
   const finalTranscriptRef = useRef('')
   const interimTranscriptRef = useRef('')
-  const resetTimerRef = useRef(null)
 
   const selectedLanguage = LANGUAGES.find((item) => item.code === language)?.label || 'English'
   const displayedTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ')
@@ -44,9 +43,6 @@ function VoiceAssistant({ onInventoryUpdated }) {
       const result = await axios.post(`${API}/voice/stock`, { text }, { headers: AUTH })
       setParsedCommand(result.data)
       if (result.data.success && ['ADD', 'REMOVE'].includes(result.data.parsed?.action)) await onInventoryUpdated?.()
-      if (result.data.success) {
-        resetTimerRef.current = window.setTimeout(() => resetVoiceCommand(), 2500)
-      }
     } catch (error) {
       setErrorMessage(error.response?.data?.detail || 'Unable to connect to the inventory server. Please try again.')
     } finally {
@@ -67,10 +63,6 @@ function VoiceAssistant({ onInventoryUpdated }) {
   }
 
   const resetVoiceCommand = () => {
-    if (resetTimerRef.current) {
-      window.clearTimeout(resetTimerRef.current)
-      resetTimerRef.current = null
-    }
     stopRequestedRef.current = true
     recognitionErrorRef.current = false
     recognitionRef.current?.abort()
@@ -168,7 +160,6 @@ function VoiceAssistant({ onInventoryUpdated }) {
 
   useEffect(() => () => {
     recognitionRef.current?.abort()
-    if (resetTimerRef.current) window.clearTimeout(resetTimerRef.current)
   }, [])
 
   return <section className="assistant-panel" id="overview">
