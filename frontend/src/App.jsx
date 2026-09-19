@@ -4,7 +4,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import './App.css'
 import VoiceAssistant from './components/VoiceAssistant'
 
-const API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
+const API = import.meta.env.VITE_API_URL || 'https://secure-inventory-assistant.onrender.com/api'
 const api = axios.create({ baseURL: API })
 const auth = { Authorization: 'Bearer owner-demo-token' }
 const DEMO_USER_ID = 1

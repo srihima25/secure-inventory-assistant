@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import axios from 'axios'
 
-const PARSE_API = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000/api'
+const PARSE_API = import.meta.env.VITE_API_URL || 'https://secure-inventory-assistant.onrender.com/api'
 
 const LANGUAGES = [
   { code: 'en-IN', label: 'English' },
