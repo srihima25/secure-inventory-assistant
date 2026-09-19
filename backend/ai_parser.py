@@ -16,10 +16,12 @@ UNIT_ALIASES = {
     "carton": "Cartons", "cartons": "Cartons",
     "box": "Boxes", "boxes": "Boxes",
     "dozen": "Dozens", "dozens": "Dozens",
+    "l": "Litres", "lt": "Litres", "ltr": "Litres",
     "litre": "Litres", "litres": "Litres", "liter": "Litres", "liters": "Litres",
     "quintal": "Quintals", "quintals": "Quintals",
 }
 PRODUCT_ALIASES = {"rice": "Rice", "biyyam": "Rice", "sugar": "Sugar", "oil": "Oil", "biscuits": "Biscuits", "biscuit": "Biscuits"}
+UNIT_PATTERN = r"(?:l|lt|ltr|litre|litres|liter|liters|piece|pieces|pc|kg|kilo|kilos|kilogram|kilograms|bag|bags|carton|cartons|box|boxes|dozen|dozens|quintal|quintals)"
 
 
 def clarification(message="Please specify the product and action."):
@@ -82,12 +84,18 @@ def _fallback_parse(text):
     lowered = text.lower()
     product = next((canonical for alias, canonical in PRODUCT_ALIASES.items() if re.search(rf"\b{re.escape(alias)}\b", lowered)), None)
     quantity_match = re.search(r"\b(\d+(?:\.\d+)?)\b", lowered)
-    unit = next((canonical for alias, canonical in UNIT_ALIASES.items() if re.search(rf"\b{re.escape(alias)}\b", lowered)), None)
+    quantity_unit_match = re.search(rf"\b\d+(?:\.\d+)?\s+({UNIT_PATTERN})\b", lowered)
+    unit = UNIT_ALIASES.get(quantity_unit_match.group(1)) if quantity_unit_match else next((canonical for alias, canonical in UNIT_ALIASES.items() if re.search(rf"\b{re.escape(alias)}\b", lowered)), None)
+    if not product and quantity_unit_match:
+        after_unit = lowered[quantity_unit_match.end():]
+        product_match = re.search(r"\b(?:of\s+)?([a-z][a-z0-9-]*)\b", after_unit)
+        before_quantity = re.search(rf"\b([a-z][a-z0-9-]*)\s+\d+(?:\.\d+)?\s+{UNIT_PATTERN}\b", lowered)
+        product = (product_match or before_quantity).group(1).title() if (product_match or before_quantity) else None
     price_match = re.search(r"\b(?:price|at)\s*(?:rs\.?|inr|rupees?)?\s*(-?\d+(?:\.\d+)?)", lowered)
     price = float(price_match.group(1)) if price_match else None
     if any(term in lowered for term in ("stock", "inventory", "kitna", "entha")):
         return _validated_result({"product": product, "action": "CHECK", "quantity": None, "unit": None, "price": None}) if product else clarification()
-    if any(term in lowered for term in ("remove", "sell", "sold", "sell chesanu", "nikalo", "hatao", "becha", "bech diya", "teesey", "ammayi")):
+    if any(term in lowered for term in ("remove", "delete", "sell", "sold", "sell chesanu", "nikalo", "hatao", "becha", "bech diya", "teesey", "ammayi")):
         action = "REMOVE"
     elif any(term in lowered for term in ("add", "vachayi", "vachai", "vachindi", "vachinayi", "received", "karo", "cheyyi", "came", "aaya", "aaye")):
         action = "ADD"

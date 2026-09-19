@@ -8,6 +8,7 @@ const LANGUAGES = [
   { code: 'en-IN', label: 'English' },
   { code: 'te-IN', label: 'Telugu' },
   { code: 'hi-IN', label: 'Hindi' },
+  { code: 'te-IN', label: 'Telugu + English' },
 ]
 
 function getRecognitionConstructor() {
@@ -28,6 +29,7 @@ function VoiceAssistant({ onInventoryUpdated }) {
   const stopRequestedRef = useRef(false)
   const recognitionErrorRef = useRef(false)
   const finalTranscriptRef = useRef('')
+  const interimTranscriptRef = useRef('')
 
   const selectedLanguage = LANGUAGES.find((item) => item.code === language)?.label || 'English'
   const displayedTranscript = [finalTranscript, interimTranscript].filter(Boolean).join(' ')
@@ -60,6 +62,23 @@ function VoiceAssistant({ onInventoryUpdated }) {
     recognitionRef.current?.stop()
   }
 
+  const resetVoiceCommand = () => {
+    stopRequestedRef.current = true
+    recognitionErrorRef.current = false
+    recognitionRef.current?.abort()
+    recognitionRef.current = null
+    finalTranscriptRef.current = ''
+    interimTranscriptRef.current = ''
+    setIsListening(false)
+    setFinalTranscript('')
+    setInterimTranscript('')
+    setErrorMessage('')
+    setParsedCommand(null)
+    setIsProcessing(false)
+    setIsEditing(false)
+    setEditedTranscript('')
+  }
+
   const startListening = () => {
     const Recognition = getRecognitionConstructor()
     if (!Recognition) {
@@ -75,6 +94,8 @@ function VoiceAssistant({ onInventoryUpdated }) {
     const recognition = new Recognition()
     stopRequestedRef.current = false
     recognitionErrorRef.current = false
+    interimTranscriptRef.current = ''
+    setInterimTranscript('')
     recognition.lang = language
     recognition.continuous = true
     recognition.interimResults = true
@@ -85,7 +106,7 @@ function VoiceAssistant({ onInventoryUpdated }) {
     recognition.onresult = (event) => {
       let nextFinal = ''
       let nextInterim = ''
-      for (let index = event.resultIndex; index < event.results.length; index += 1) {
+      for (let index = event.resultIndex || 0; index < event.results.length; index += 1) {
         const text = event.results[index][0].transcript.trim()
         if (event.results[index].isFinal) nextFinal += `${text} `
         else nextInterim += `${text} `
@@ -94,9 +115,11 @@ function VoiceAssistant({ onInventoryUpdated }) {
         finalTranscriptRef.current = `${finalTranscriptRef.current} ${nextFinal}`.trim()
         setFinalTranscript(finalTranscriptRef.current)
       }
-      setInterimTranscript(nextInterim.trim())
+      interimTranscriptRef.current = nextInterim.trim()
+      setInterimTranscript(interimTranscriptRef.current)
     }
     recognition.onerror = (event) => {
+      console.error('[VoiceAssistant] Speech recognition error:', event.error, event.message || '')
       const messages = {
         'not-allowed': 'Microphone permission was denied. Allow microphone access and try again.',
         'audio-capture': 'No microphone was found. Connect a microphone and try again.',
@@ -107,10 +130,19 @@ function VoiceAssistant({ onInventoryUpdated }) {
       recognitionErrorRef.current = true
       setIsListening(false)
     }
+    recognition.onnomatch = () => {
+      console.error('[VoiceAssistant] Speech recognition returned no match.')
+      setErrorMessage('Speech was not recognized. Please try speaking again.')
+    }
     recognition.onend = () => {
-      const text = finalTranscriptRef.current
+      if (!finalTranscriptRef.current && interimTranscriptRef.current) {
+        finalTranscriptRef.current = interimTranscriptRef.current
+        setFinalTranscript(finalTranscriptRef.current)
+      }
+      const text = finalTranscriptRef.current || interimTranscriptRef.current
       if (!stopRequestedRef.current) setErrorMessage('Speech recognition ended unexpectedly. Click Start Listening to try again.')
       setIsListening(false)
+      interimTranscriptRef.current = ''
       setInterimTranscript('')
       recognitionRef.current = null
       if (text && !recognitionErrorRef.current) sendStockCommand(text)
@@ -119,6 +151,7 @@ function VoiceAssistant({ onInventoryUpdated }) {
     try {
       recognition.start()
     } catch {
+      console.error('[VoiceAssistant] Unable to start speech recognition.')
       setErrorMessage('Microphone could not be started. Check your browser permissions and try again.')
       setIsListening(false)
       recognitionRef.current = null
@@ -131,7 +164,7 @@ function VoiceAssistant({ onInventoryUpdated }) {
     <div className="assistant-copy">
       <span className="section-kicker">VOICE ASSISTANT <span className={`status-pill ${isListening ? 'is-listening' : ''}`}><i /> {isListening ? 'Listening...' : 'Ready'}</span></span>
       <h2>Speak what changed<br />in your shop.</h2>
-      <p>{errorMessage || 'Your speech stays in the browser for now. AI command understanding comes in the next phase.'}</p>
+      <p>{errorMessage || 'Speak naturally, review the recognized command, and let AI update your inventory.'}</p>
       <div className="voice-details">
         <span>Language: <strong>{selectedLanguage}</strong></span>
         <span>Status: <strong>{isListening ? 'Listening...' : 'Ready'}</strong></span>
@@ -145,10 +178,11 @@ function VoiceAssistant({ onInventoryUpdated }) {
       {isProcessing && <div className="command-success" aria-live="polite"><strong>Processing your inventory command...</strong></div>}
       <div className="assistant-actions">
         <button className={`mic-button ${isListening ? 'listening' : ''}`} onClick={startListening} aria-label={isListening ? 'Stop listening' : 'Start listening'} title={isListening ? 'Stop Listening' : 'Start Listening'}><span aria-hidden="true">{isListening ? '■' : '●'}</span></button>
-        <div><strong>{isListening ? 'Stop Listening' : 'Start Listening'}</strong><small>English, Telugu, Hindi</small></div>
+        <div><strong>{isListening ? 'Stop Listening' : 'Start Listening'}</strong><small>English, Telugu, Hindi, Telugu + English</small></div>
         <select value={language} onChange={(event) => setLanguage(event.target.value)} disabled={isListening} aria-label="Speech language">
           {LANGUAGES.map((item) => <option value={item.code} key={item.code}>{item.label}</option>)}
         </select>
+        <button className="parse-command-button" type="button" onClick={resetVoiceCommand}>Reset</button>
       </div>
     </div>
     <div className="assistant-orbit"><div className="orbit orbit-one" /><div className="orbit orbit-two" /><div className="voice-wave"><i /><i /><i /><i /><i /></div><span>{isListening ? 'Listening now' : 'Speak naturally'}</span></div>
