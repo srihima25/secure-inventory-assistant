@@ -4,7 +4,7 @@ import { Area, AreaChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'rec
 import './App.css'
 import VoiceAssistant from './components/VoiceAssistant'
 
-const API = import.meta.env.VITE_API_URL || 'https://secure-inventory-assistant.onrender.com/api'
+const API = 'https://secure-inventory-assistant.onrender.com/api'
 const api = axios.create({ baseURL: API })
 const auth = { Authorization: 'Bearer owner-demo-token' }
 const DEMO_USER_ID = 1
@@ -45,9 +45,9 @@ function App() {
   }
   const applyDashboardData = (data) => { setError(''); setProducts(data.products); setHistory(data.history); setSales(data.sales); setLowStock(data.lowStock); setLoading(false) }
   const loadDashboard = async () => {
-    try { applyDashboardData(await fetchDashboardData()) } catch (requestError) { setError(requestError.response?.data?.detail || 'Backend unavailable. Start FastAPI on port 8000.'); setLoading(false) }
+    try { applyDashboardData(await fetchDashboardData()) } catch (requestError) { setError(requestError.response?.data?.detail || 'The deployed backend is unavailable. Please try again shortly.'); setLoading(false) }
   }
-  useEffect(() => { fetchDashboardData().then(applyDashboardData).catch(() => { setError('Backend unavailable. Start FastAPI on port 8000.'); setLoading(false) }) }, [])
+  useEffect(() => { fetchDashboardData().then(applyDashboardData).catch(() => { setError('The deployed backend is unavailable. Please try again shortly.'); setLoading(false) }) }, [])
 
   const updateStock = async (event, action) => {
     event.preventDefault()
